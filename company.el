@@ -636,14 +636,27 @@ asynchronous call into synchronous.")
     (define-key keymap (kbd "<f1>") 'company-show-doc-buffer)
     (define-key keymap (kbd "C-h") 'company-show-doc-buffer)
     (define-key keymap "\C-w" 'company-show-location)
-    (define-key keymap "\C-s" 'company-search-candidates)
-    (define-key keymap "\C-\M-s" 'company-filter-candidates)
+    (define-key keymap "\C-\M-s" 'company-search-candidates)
+    (define-key keymap "\C-s" 'company-filter-candidates)
+    (define-key keymap (kbd "C-n") 'company-select-next)
+    (define-key keymap (kbd "C-p") 'company-select-previous)
     (dotimes (i 10)
       (define-key keymap (read-kbd-macro (format "M-%d" i)) 'company-complete-number))
      keymap)
   "Keymap that is enabled during an active completion.")
 
 (defvar company--disabled-backends nil)
+
+(defun company--fuzzy-regexp (text)
+  (let ((x (replace-regexp-in-string "\\.\\*" "" text))
+        (result "")
+        (i 0))
+    (dolist (field (split-string x " ") result)
+      (setq result (concat result (if (= 1 (% i 2))
+                                      field
+                                    (concat ".*" (mapconcat 'eval (split-string field "" t) ".*") ".*"))))
+      (setq i (1+ i))
+      )))
 
 (defun company-init-backend (backend)
   (and (symbolp backend)
@@ -1620,7 +1633,7 @@ from the rest of the back-ends in the group, if any, will be left at the end."
 (defvar-local company--search-old-changed nil)
 
 (defun company--search (text lines)
-  (let ((quoted (regexp-quote text))
+  (let ((quoted (company--fuzzy-regexp text))
         (i 0))
     (cl-dolist (line lines)
       (when (string-match quoted line (length company-prefix))
@@ -1645,7 +1658,7 @@ from the rest of the back-ends in the group, if any, will be left at the end."
   (let* ((company-candidates-predicate
           (and (not (string= ss ""))
                company-search-filtering
-               (lambda (candidate) (string-match ss candidate))))
+               (lambda (candidate) (string-match (company--fuzzy-regexp ss) candidate))))
          (cc (company-calculate-candidates company-prefix)))
     (unless cc (error "No match"))
     (company-update-candidates cc)))
@@ -1756,6 +1769,8 @@ from the rest of the back-ends in the group, if any, will be left at the end."
     (define-key keymap "\C-s" 'company-search-repeat-forward)
     (define-key keymap "\C-r" 'company-search-repeat-backward)
     (define-key keymap "\C-o" 'company-search-toggle-filtering)
+    (define-key keymap (kbd "C-n") 'company-select-next)
+    (define-key keymap (kbd "C-p") 'company-select-previous)
     (dotimes (i 10)
       (define-key keymap (read-kbd-macro (format "M-%d" i)) 'company-complete-number))
     keymap)
@@ -2320,7 +2335,7 @@ If SHOW-VERSION is non-nil, show the version in the echo area."
                            line))
     (when selected
       (if (and (not (string= company-search-string ""))
-               (string-match (regexp-quote company-search-string) value
+               (string-match  (company--fuzzy-regexp company-search-string) value
                              (length company-prefix)))
           (let ((beg (+ margin (match-beginning 0)))
                 (end (+ margin (match-end 0)))
